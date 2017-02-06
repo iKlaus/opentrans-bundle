@@ -9,20 +9,21 @@
  */
 namespace SE\Bundle\OpenTransBundle\DependencyInjection;
 
+use SE\Component\OpenTrans\DocumentBuilder;
+use SE\Component\OpenTrans\DocumentFactory\DocumentFactoryResolver;
+use SE\Component\OpenTrans\NodeLoader;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpKernel\DependencyInjection\Extension;
 use Symfony\Component\DependencyInjection\Loader;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
 
-use \SE\Component\OpenTrans\DocumentFactory\DocumentFactoryResolver;
-use \SE\Component\OpenTrans\NodeLoader;
-
 /**
  *
  * @package SE\Bundle\OpenTransBundle
- * @author Sven Eisenschmidt <sven.eisenschmidt@gmail.com>
+ * @author  Sven Eisenschmidt <sven.eisenschmidt@gmail.com>
  */
 class SEOpenTransExtension extends Extension
 {
@@ -34,26 +35,29 @@ class SEOpenTransExtension extends Extension
         $configuration = new Configuration();
         $config = $this->processConfiguration($configuration, $configs);
 
-        $loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__.'/../Resources/config'));
+        $loader = new Loader\YamlFileLoader($container, new FileLocator(__DIR__ . '/../Resources/config'));
         $loader->load('services.yml');
 
         $documents = $config['documents'];
-        foreach($documents as $id => $documentConfig) {
 
-            $name = 'se.opentrans.document_builder'.$id;
+        foreach ($documents as $id => $documentConfig) {
+            $name = 'se.opentrans.document_builder.' . $id;
             $type = $documentConfig['type'];
 
-            $nodeLoaderInstance = new NodeLoader;
-            $nodeLoaderDefinition = new Definition(trim(get_class($nodeLoaderInstance), '\\'));
+            $nodeLoaderInstance = new NodeLoader();
+            $nodeLoaderDefinition = new Definition(NodeLoader::class);
 
-            foreach($documentConfig['loader'] as $nodeName => $class) {
+            foreach ($documentConfig['loader'] as $nodeName => $class) {
                 $nodeLoaderDefinition->addMethodCall('set', array($nodeName, trim($class, '\\')));
                 $nodeLoaderInstance->set($nodeName, trim($class, '\\'));
             }
 
             $factoryClass = DocumentFactoryResolver::resolveFactory($nodeLoaderInstance, $type);
             $factory = new Definition(trim($factoryClass, '\\'), array($nodeLoaderDefinition));
-            $builder = new Definition('SE\Component\OpenTrans\DocumentBuilder', array($factory));
+
+            $serializerReference = new Reference('jms_serializer', ContainerInterface::NULL_ON_INVALID_REFERENCE);
+
+            $builder = new Definition(DocumentBuilder::class, array($factory, $serializerReference));
 
             $builder->addMethodCall('build');
             $builder->addMethodCall('load', array($documentConfig['document']));
